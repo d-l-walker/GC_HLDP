@@ -5,16 +5,15 @@ import numpy as np
 import pandas as pd
 import astropy.units as u
 
+logging.basicConfig(filename='moment_movie_script.log', 
+                    level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s', 
+                    filemode = "w+")
+
 
 # Function to modify the uid string to be compatible with the file naming convention
 def modify_uid(uid_string):
     return uid_string.replace('://', '___').replace('/', '_')
 
-
-if os.path.exists('moment_movie_script.log'):
-    os.remove('moment_movie_script.log')
-
-logging.basicConfig(filename='moment_movie_script.log', level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 make_moments = True
 make_movies = True
@@ -29,11 +28,12 @@ for index, row in df.iterrows():
     matching_files = [f for f in os.listdir() if all(s in f for s in [row['name'], modified_uid]) and f.endswith('.fits')]
     
     for file in matching_files:
-        os.makedirs(row['project'], exist_ok=True)
-        mol = row['mol']
         if pd.isna(row['chans']):
             continue
+        os.makedirs(row['project'], exist_ok=True)
+        mol = row['mol']
         start, end = [int(x) for x in row['chans'].split('~')]
+        assert start < end, 'Start channel must be less than end channel!'
 
         # Get the start and end frequencies from the fits file based on the channel range
         file_ok = True
@@ -55,13 +55,17 @@ for index, row in df.iterrows():
             if make_moments:
                 outname_moments = file.replace('.fits', '.'+mol+ext)
                 if not os.path.exists('./'+row['project']+'/'+outname_moments+'.fits'):
-                    immoments(imagename=file,
-                            moments=[0],
-                            axis='spectral',
-                            chans=str(start)+'~'+str(end),
-                            outfile='./'+row['project']+'/'+outname_moments)
+                    try:
+                        immoments(imagename=file,
+                                moments=[0],
+                                axis='spectral',
+                                chans=str(start)+'~'+str(end),
+                                outfile='./'+row['project']+'/'+outname_moments)
+                    except Exception as e:
+                        logging.error('Error: %s', e)
 
-                    exportfits(imagename='./'+row['project']+'/'+outname_moments, fitsimage='./'+row['project']+'/'+outname_moments+'.fits', overwrite=True)
+                    if os.path.exists('./'+row['project']+'/'+outname_moments):
+                        exportfits(imagename='./'+row['project']+'/'+outname_moments, fitsimage='./'+row['project']+'/'+outname_moments+'.fits', overwrite=True)
                     
                     try:
                         path = os.path.join(row['project'], outname_moments)
